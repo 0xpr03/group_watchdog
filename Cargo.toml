@@ -1,0 +1,18 @@
+[package]
+name = "group_watchdog"
+version = "0.1.0"
+authors = ["Aron Heinecke <aron.heinecke@t-online.de>"]
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+crossbeam-channel = "0.3"
+notify = "5.0.0-pre.1"
+
+# can be replaced by nix once https://github.com/nix-rust/nix/pull/864 has landet
+users = "0.9"
+nix = "0.15"
+walkdir = "2"
+
+structopt = "0.3"
