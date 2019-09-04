@@ -77,6 +77,19 @@ fn main() -> Result<()> {
         println!("Parsed input!");
     }
 
+    println!("Settings initial permissions..");
+
+    for entry in WalkDir::new(opt.files.as_path()) {
+        #[allow(unused_must_use)]
+        match entry {
+            Ok(entry) => {
+                set_permissions(entry.path(), gid, mode_file, mode_folder, debug)
+                    .map_err(|e| eprintln!("Can't set perms for {:?} {}", entry.path(), e));
+            }
+            Err(e) => eprintln!("Can't access {:?}", e),
+        }
+    }
+
     let (tx, rx) = unbounded();
 
     // Automatically select the best implementation for your platform.
