@@ -1,11 +1,10 @@
-use crossbeam_channel::unbounded;
 use nix::sys::stat::{fchmodat, FchmodatFlags, Mode};
 use nix::unistd::{fchownat, FchownatFlags, Gid};
-use notify::event::EventKind::*;
-use notify::event::ModifyKind::*;
-use notify::{Error, ErrorKind, RecommendedWatcher, RecursiveMode, Result, Watcher};
+use notify::DebouncedEvent::*;
+use notify::{watcher, Error, RecursiveMode, Result, Watcher};
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
+use std::sync::mpsc::channel;
 use std::time::Duration;
 use structopt::StructOpt;
 use users::mock::gid_t;
@@ -38,10 +37,7 @@ fn main() -> Result<()> {
         if get_group_by_gid(v).is_none() {
             let msg = format!("Invalid group ID provided! {}", v);
             eprintln!("{}", &msg);
-            return Err(Error {
-                kind: ErrorKind::Generic(msg),
-                paths: Vec::new(),
-            });
+            return Err(Error::Generic(msg));
         }
         v
     } else if let Some(v) = opt.gid.gname {
@@ -50,17 +46,11 @@ fn main() -> Result<()> {
             None => {
                 let msg = format!("Invalid group Name. {}", v);
                 eprintln!("{}", msg);
-                return Err(Error {
-                    kind: ErrorKind::Generic(msg),
-                    paths: Vec::new(),
-                });
+                return Err(Error::Generic(msg));
             }
         }
     } else {
-        return Err(Error {
-            kind: ErrorKind::Generic(format!("Please specify the group to set!")),
-            paths: Vec::new(),
-        });
+        return Err(Error::Generic(format!("Please specify the group to set!")));
     };
 
     let mut mode_file = Mode::empty();
@@ -77,10 +67,10 @@ fn main() -> Result<()> {
         println!("Parsed input!");
     }
 
-    let (tx, rx) = unbounded();
+    let (tx, rx) = channel();
 
     // Automatically select the best implementation for your platform.
-    let mut watcher: RecommendedWatcher = Watcher::new(tx, Duration::from_secs(2))?;
+    let mut watcher = watcher(tx, Duration::from_secs(2))?;
 
     // Add a path to be watched. All files and directories at that path and
     // below will be monitored for changes.
@@ -92,12 +82,12 @@ fn main() -> Result<()> {
 
     loop {
         match rx.recv() {
-            Ok(Ok(event)) => {
+            Ok(event) => {
                 if debug {
                     println!("{:?}", event);
                 }
-                match event.kind {
-                    Create(_) | Modify(Metadata(_)) => event.paths.into_iter().for_each(|p| {
+                match event {
+                    Create(p) | Chmod(p) => {
                         if !set.remove(&p) {
                             if let Err(e) = update_path(
                                 p.as_path(),
@@ -119,7 +109,8 @@ fn main() -> Result<()> {
                                 println!("Found in set, ignoring {:?}", &p);
                             }
                         }
-                    }),
+                    }
+                    Rescan => set.clear(),
                     e => {
                         if debug {
                             println!("Ignoring {:?}", e)
@@ -127,7 +118,6 @@ fn main() -> Result<()> {
                     }
                 }
             }
-            Ok(Err(e)) => eprintln!("Error receiving inotify event: {}", e),
             Err(err) => eprintln!("watch error: {:?}", err),
         };
     }
