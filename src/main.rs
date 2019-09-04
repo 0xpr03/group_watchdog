@@ -114,6 +114,10 @@ fn main() -> Result<()> {
                                 );
                             }
                             set.insert(p);
+                        } else {
+                            if debug {
+                                println!("Found in set, ignoring {:?}", &p);
+                            }
                         }
                     }),
                     e => {
